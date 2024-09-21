@@ -1,15 +1,5 @@
 #include "ringpool.h"
 
-
-typedef struct ringbuffer_s{
-    char *buffer;       // 指向数据缓冲区的指针
-    char *ringbuffer_name;
-    size_t capacity;    // 缓冲区的总容量
-    size_t read;        // 队列的头部索引
-    size_t write;        // 队列的尾部索引
-    size_t size;        // 当前队列中数据的大小
-} ringbuffer_t;
-
 // 检测一个数是否为2的指数次方
 int is_power_of_two(size_t n) {
     return (n > 0) && ((n & (n - 1)) == 0);
@@ -37,24 +27,26 @@ ringbuffer_t* init_ring_buffer(char *ringbuffer_name, size_t capacity) {
 
 // typedef void* (*write_func)(void*, size_t);
 
-int ring_buffer_get_write_pointer(ringbuffer_t* rb, void* data, size_t write_size){
+void* ring_buffer_push_struct_data(ringbuffer_t* rb, void* data, size_t write_size){
     size_t write = rb->write;
     size_t read = rb->read;
     if(rb->capacity - write > write_size){
-        memcpy(rb->buffer + write, data, write_size);
+        if(data)
+            memcpy(rb->buffer + write, data, write_size);
         asm volatile ("mfence" ::: "memory");
         rb->write += write_size;
         rb->size += write_size;
-        return 0;
+        return rb->buffer + write;
     }
     if(read >= write_size){
-        memcpy(rb->buffer, data, write_size);
+        if(data)
+            memcpy(rb->buffer, data, write_size);
         asm volatile ("mfence" ::: "memory");
         rb->write = write_size - 1;
         rb->size += rb->capacity - write + write_size;
-        return 0;
+        return rb->buffer;
     }
-    return -1;
+    return NULL;
 }
 
 void ring_buffer_pop(ringbuffer_t* rb, size_t free_size){
@@ -76,18 +68,27 @@ void ring_buffer_clear(ringbuffer_t* rb){
     rb->size = 0;
 }
 
+typedef struct a{
+    int x,y;
+}a;
+
 int main(){
     ringbuffer_t* rb = init_ring_buffer("ring", 1024);
-    int i = 1000;
-    while (i--)
-    {
-        ring_buffer_get_write_pointer(rb, "abcde", sizeof("abcde") - 1);
-        printf("[%d][%d %d]------------------------------\n", i, rb->read, rb->write);
-        // printf("%.*s\n", 5,rb->buffer + rb->read);
-        ring_buffer_pop(rb, 4);
-        // printf("%.*s\n", 2,rb->buffer + rb->read);
-        printf("==============================\n");
-    }
+    a *t;
+    NEW(rb, t);
+    t->x = 10;
+    t->y = 50;
+    printf("%d %d\n", t->x, t->y);
+    // int i = 1000;
+    // while (i--)
+    // {
+    //     ring_buffer_get_write_pointer(rb, "abcde", sizeof("abcde") - 1);
+    //     printf("[%d][%d %d]------------------------------\n", i, rb->read, rb->write);
+    //     // printf("%.*s\n", 5,rb->buffer + rb->read);
+    //     ring_buffer_pop(rb, 4);
+    //     // printf("%.*s\n", 2,rb->buffer + rb->read);
+    //     printf("==============================\n");
+    // }
     
     destroy_ring_buffer(rb);
     return 0;
